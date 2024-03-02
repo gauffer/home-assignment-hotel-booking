@@ -1,3 +1,3 @@
-module github.com/gauffer/home-assignment-hotel-booking
+module applicationDesignTest
 
-go 1.21.3
+go 1.21.6
