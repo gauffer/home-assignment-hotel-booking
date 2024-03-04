@@ -1,56 +1,48 @@
-# Application design
 
-В коде представлен прототип сервиса бронирования номеров в отелях,
-в котором реализована возможность забронировать свободный номер в отеле.
-
-Сервис будет развиваться, например:
-
-- появится отправка письма-подтверждения о бронировании
-- появятся скидки, промокоды, программы лояльности
-- появится возможность бронирования нескольких номеров
-
-## Задание
-
-Провести рефакторинг структуры и кода приложения, исправить существующие
-проблемы в логике. Персистентное хранение реализовывать не требуется,
-все данные храним в памяти сервиса.
-
-В результате выполнения задания ожидается структурированный код сервиса,
-с корректно работающей логикой сценариев бронирования номеров в отелях.
-
-Чеклист:
-
-- код реорганизован и выделены слои
-- выделены абстракций и интерфейсы
-- техническе и логические ошибки исправлены
-
-Ограничения:
-
-- ожидаем реализацию, которая управляет состоянием в памяти приложения,
- но которую легко заменить на внешнее хранилище
-- если у тебя есть опыт с Go: для решения надо использовать только
- стандартную библиотеку Go + роутер (например chi)
-- если у тебя нет опыта с Go: можно реализовать решение на своем
- любимом стеке технологий
-
-## Что будет на встрече
-
-На встрече ожидаем что ты продемонстрируешь экран и презентуешь свое решение:
-расскажешь какими проблемами обладает исходный код и как они решены в твоем варианте.
-Мы будем задавать вопросы о том почему было решено разделить ответственность между
-компонентами тем или иным образом, какими принципами ты при этом руководствуешься.
-Спросим что будет если продакт решит добавить какую-то новую фичу — как она ляжет
-на предложенную тобой структуру. Также можем поговорить и о более технических вещах:
-о значениях и указателях, многопоточности, интерфейсах, каналах.
-
-## Например
-
-```sh
-go run main.go
+```
+$ tree internal
+internal
+├── domains
+│   ├── availability.go
+│   └── order.go
+├── infrastructure
+│   ├── logger
+│   │   └── logger.go
+│   └── unitofwork
+│       └── mutex_unit_of_work.go
+├── presentation
+│   ├── httphandlers
+│   │   ├── orders_http_handler.go
+│   │   └── orders_middlewares.go
+│   └── httpmodels
+│       └── orders_models.go
+├── repositories
+│   └── availability_repository.go
+├── services
+│   └── booking_service.go
+└── shared
 ```
 
-```sh
-curl --location --request POST 'localhost:8080/orders' \
+```
+$ tree cmd
+cmd
+└── server
+    ├── main.go
+    └── main_test.go
+```
+
+```
+$ go test ./...  -v
+```
+
+We can use linux core utils magic to make json slog pretty, see in the end.
+```
+$ go run cmd/server/main.go
+```
+
+Run this twice to validate rejection of overbooking
+```
+curl -sS --location --request POST 'localhost:8080/orders' \
 --header 'Content-Type: application/json' \
 --data-raw '{
     "hotel_id": "reddison",
@@ -58,5 +50,29 @@ curl --location --request POST 'localhost:8080/orders' \
     "email": "guest@mail.ru",
     "from": "2024-01-02T00:00:00Z",
     "to": "2024-01-04T00:00:00Z"
-}'
+}' | jq -R 'fromjson? // .'
+```
+
+Run this to test handling required fields by middlewares
+```
+curl -sS --location --request POST 'localhost:8080/orders' \
+--header 'Content-Type: application/json' \
+--data-raw '{
+    "room_id": "lux",
+    "email": "guest@mail.ru",
+    "from": "2024-01-02T00:00:00Z",
+    "to": "2024-01-04T00:00:00Z"
+}' | jq -R 'fromjson? // .'
+```
+
+TODO:
+- [ ] TODO in the code
+- [ ] use order domain, unused for simplicity
+- [ ] instead of writing to response jsonBody - create and use OrderAPIResponse struct 
+- [ ] various small oversights
+
+
+Hardcore but very pretty logging, won't work with the Air.
+```
+go run cmd/server/main.go | unbuffer -p awk -F'"' -v OFS='"' '{ gsub("T"," ",$4); gsub("[0-9]{4}-[0-9]{2}-[0-9]{2} ","",$4); gsub("\\+[0-9:]+","",$4); print }' | jq '.'
 ```
