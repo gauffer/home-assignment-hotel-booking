@@ -1,4 +1,4 @@
-package httpmodels
+package apimodels
 
 import "time"
 

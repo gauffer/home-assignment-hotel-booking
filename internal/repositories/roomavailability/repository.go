@@ -1,29 +1,29 @@
-package repositories
+package roomavailability
 
 import (
 	"applicationDesignTest/internal/domains"
-	"errors"
 	"time"
 )
 
-// TODO: fix and start using
-type availabilityRepository interface {
-	SetRoomPending(
-		hotelID, roomID string,
-		from, to time.Time,
-	) (bool, error)
-	Book(
-		hotelID, roomID string,
-		from, to time.Time,
-	) (*domains.RoomAvailability, error)
+type AvailabilityRepository interface {
+	EnsureRoomAvailability(hotelID, roomID string, from, to time.Time) error
+	Book(hotelID, roomID string, from, to time.Time) error
 }
 
-type AvailabilityRepository struct {
+type Repository struct {
 	data []domains.RoomAvailability
 }
 
-var ErrRoomNotFound = errors.New("room not found")
-var ErrRoomNotAvailable = errors.New("room not available for selected dates")
+type RoomNotAvailableError struct {
+}
+
+func (e *RoomNotAvailableError) Error() string {
+	return "Room not available for selected dates"
+}
+
+func NewRoomAvailabilityError() *RoomNotAvailableError {
+	return &RoomNotAvailableError{}
+}
 
 func isAvailabilityMatch(
 	availability domains.RoomAvailability,
@@ -34,33 +34,35 @@ func isAvailabilityMatch(
 		availability.Date.Equal(date)
 }
 
-func (r *AvailabilityRepository) hasAvailabilityForDate(
+func (r *Repository) hasAvailabilityForDate(
 	hotelID, roomID string,
 	date time.Time,
 ) bool {
+	available := false
 	for _, availability := range r.data {
-		if isAvailabilityMatch(availability, hotelID, roomID, date) &&
-			availability.Quota > 0 {
-			return true
+		if isAvailabilityMatch(availability, hotelID, roomID, date) {
+			if availability.Quota > 0 {
+				available = true
+				break
+			}
 		}
 	}
-	return false
+	return available
 }
 
-func (r *AvailabilityRepository) reduceQuotaForDate(
+func (r *Repository) reduceQuotaForDate(
 	hotelID, roomID string,
 	date time.Time,
-) error {
+) {
 	for i, availability := range r.data {
 		if isAvailabilityMatch(availability, hotelID, roomID, date) {
 			r.data[i].Quota -= 1
-			return nil
+			return
 		}
 	}
-	return ErrRoomNotFound
 }
 
-func (r *AvailabilityRepository) SetRoomPending(
+func (r *Repository) EnsureRoomAvailability(
 	hotelID, roomID string,
 	from, to time.Time,
 ) error {
@@ -69,14 +71,14 @@ func (r *AvailabilityRepository) SetRoomPending(
 
 	for date := from; !date.After(to); date = date.AddDate(0, 0, 1) {
 		if !r.hasAvailabilityForDate(hotelID, roomID, date) {
-			return ErrRoomNotAvailable
+			return NewRoomAvailabilityError()
 		}
 	}
 
 	return nil
 }
 
-func (r *AvailabilityRepository) Book(
+func (r *Repository) Book(
 	hotelID, roomID string,
 	from, to time.Time,
 ) error {
@@ -84,15 +86,13 @@ func (r *AvailabilityRepository) Book(
 	to = toDay(to)
 
 	for date := from; !date.After(to); date = date.AddDate(0, 0, 1) {
-		if err := r.reduceQuotaForDate(hotelID, roomID, date); err != nil {
-			return err
-		}
+		r.reduceQuotaForDate(hotelID, roomID, date)
 	}
 
 	return nil
 }
 
-func NewAvailabilityRepository() *AvailabilityRepository {
+func NewAvailabilityRepository() *Repository {
 	initialData := []domains.RoomAvailability{
 		{HotelID: "reddison", RoomID: "lux", Date: date(2024, 1, 1), Quota: 1},
 		{HotelID: "reddison", RoomID: "lux", Date: date(2024, 1, 2), Quota: 1},
@@ -100,7 +100,7 @@ func NewAvailabilityRepository() *AvailabilityRepository {
 		{HotelID: "reddison", RoomID: "lux", Date: date(2024, 1, 4), Quota: 1},
 		{HotelID: "reddison", RoomID: "lux", Date: date(2024, 1, 5), Quota: 0},
 	}
-	return &AvailabilityRepository{data: initialData}
+	return &Repository{data: initialData}
 }
 
 func toDay(timestamp time.Time) time.Time {

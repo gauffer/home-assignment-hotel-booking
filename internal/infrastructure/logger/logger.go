@@ -9,10 +9,11 @@ import (
 
 func SetupLogger() *httplog.Logger {
 	logger := httplog.NewLogger("booking", httplog.Options{
+		SourceFieldName:  "scr",
 		JSON:             true,
 		LogLevel:         slog.LevelDebug,
 		Concise:          true,
-		RequestHeaders:   true,
+		RequestHeaders:   false,
 		MessageFieldName: "message",
 		Tags: map[string]string{
 			"version": "0.0.1",

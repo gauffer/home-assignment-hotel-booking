@@ -11,16 +11,18 @@ internal
 │   └── unitofwork
 │       └── mutex_unit_of_work.go
 ├── presentation
-│   ├── httphandlers
-│   │   ├── orders_http_handler.go
-│   │   └── orders_middlewares.go
-│   └── httpmodels
-│       └── orders_models.go
+│   ├── apierrors
+│   │   └── apierrors.go
+│   ├── apihandlers
+│   │   ├── order_handlers.go
+│   │   └── order_middlewares.go
+│   └── apimodels
+│       └── order_models.go
 ├── repositories
-│   └── availability_repository.go
-├── services
-│   └── booking_service.go
-└── shared
+│   └── roomavailability
+│       └── repository.go
+└── services
+    └── booking_service.go
 ```
 
 ```
@@ -40,7 +42,7 @@ We can use linux core utils magic to make json slog pretty, see in the end.
 $ go run cmd/server/main.go
 ```
 
-Run this twice to validate rejection of overbooking
+Run this twice to validate rejection of overbooking.
 ```
 curl -sS --location --request POST 'localhost:8080/orders' \
 --header 'Content-Type: application/json' \
@@ -53,7 +55,7 @@ curl -sS --location --request POST 'localhost:8080/orders' \
 }' | jq -R 'fromjson? // .'
 ```
 
-Run this to test handling required fields by middlewares
+Required fields are enforced, this request will result in 422 error.
 ```
 curl -sS --location --request POST 'localhost:8080/orders' \
 --header 'Content-Type: application/json' \
@@ -61,6 +63,19 @@ curl -sS --location --request POST 'localhost:8080/orders' \
     "room_id": "lux",
     "email": "guest@mail.ru",
     "from": "2024-01-02T00:00:00Z",
+    "to": "2024-01-04T00:00:00Z"
+}' | jq -R 'fromjson? // .'
+```
+
+UTC time is enforced, this request will result in 422 error.
+```
+curl -sS --location --request POST 'localhost:8080/orders' \
+--header 'Content-Type: application/json' \
+--data-raw '{
+    "hotel_id": "reddison",
+    "room_id": "lux",
+    "email": "guest@mail.ru",
+    "from": "2024-01-01T19:00:00-05:00",
     "to": "2024-01-04T00:00:00Z"
 }' | jq -R 'fromjson? // .'
 ```

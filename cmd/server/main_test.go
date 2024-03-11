@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -10,17 +11,21 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-func testApp() *chi.Mux {
-	r := SetupMain(nil)
-	r = SetupOrders(r)
+func mockedApp() *chi.Mux {
+	r := setupChi(nil)
+	r = setupOrdersRoute(r)
 	return r
+}
+
+type ErrorResponse struct {
+	Message string `json:"message"`
 }
 
 func TestPing(t *testing.T) {
 	req := httptest.NewRequest("GET", "/ping", nil)
 	respRecorder := httptest.NewRecorder()
 
-	testApp().ServeHTTP(respRecorder, req)
+	mockedApp().ServeHTTP(respRecorder, req)
 
 	if respRecorder.Code != http.StatusOK {
 		t.Errorf(
@@ -49,12 +54,12 @@ func TestCreateOrder(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	respRecorder := httptest.NewRecorder()
 
-	testApp().ServeHTTP(respRecorder, req)
+	mockedApp().ServeHTTP(respRecorder, req)
 
-	if respRecorder.Code != http.StatusCreated {
+	if respRecorder.Code != http.StatusOK {
 		t.Errorf(
 			"Expected status code %d, got %d",
-			http.StatusCreated,
+			http.StatusOK,
 			respRecorder.Code,
 		)
 	}
@@ -72,18 +77,29 @@ func TestCreateInvalidOrder(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	respRecorder := httptest.NewRecorder()
 
-	testApp().ServeHTTP(respRecorder, req)
+	mockedApp().ServeHTTP(respRecorder, req)
 
-	if respRecorder.Code != http.StatusBadRequest {
+	if respRecorder.Code != http.StatusUnprocessableEntity {
 		t.Errorf(
 			"Expected status code %d, got %d",
-			http.StatusCreated,
+			http.StatusUnprocessableEntity, // Updated status expectation
 			respRecorder.Code,
 		)
 	}
 
-	responseString := strings.TrimSpace(respRecorder.Body.String())
-	if !strings.Contains(responseString, "hotel_id is required") {
-		t.Error("Expected 'hotel_id is required' in the response body")
+	// Decode error response
+	var errResponse ErrorResponse
+	err := json.Unmarshal(respRecorder.Body.Bytes(), &errResponse)
+	if err != nil {
+		t.Fatalf("Failed to decode error response: %v", err)
+	}
+
+	expectedMessage := "Missing required fields: hotel_id"
+	if errResponse.Message != expectedMessage {
+		t.Errorf(
+			"Expected %s in error message, got: %s",
+			expectedMessage,
+			errResponse.Message,
+		)
 	}
 }

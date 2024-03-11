@@ -7,18 +7,18 @@ type UnitOfWork interface {
 	Commit()
 }
 
-type MutexUnitOfWork struct {
-	mutex *sync.Mutex
+type mutexUnitOfWork struct {
+	mu *sync.Mutex
 }
 
-func NewMutexUnitOfWork(mutex *sync.Mutex) *MutexUnitOfWork {
-	return &MutexUnitOfWork{mutex: mutex}
+func NewMutexUnitOfWork(mutex *sync.Mutex) *mutexUnitOfWork {
+	return &mutexUnitOfWork{mu: mutex}
 }
 
-func (u *MutexUnitOfWork) Begin() {
-	u.mutex.Lock()
+func (u *mutexUnitOfWork) Begin() {
+	u.mu.Lock()
 }
 
-func (u *MutexUnitOfWork) Commit() {
-	u.mutex.Unlock()
+func (u *mutexUnitOfWork) Commit() {
+	u.mu.Unlock()
 }

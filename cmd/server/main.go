@@ -3,8 +3,8 @@ package main
 import (
 	"applicationDesignTest/internal/infrastructure/logger"
 	"applicationDesignTest/internal/infrastructure/unitofwork"
-	"applicationDesignTest/internal/presentation/httphandlers"
-	"applicationDesignTest/internal/repositories"
+	"applicationDesignTest/internal/presentation/apihandlers"
+	"applicationDesignTest/internal/repositories/roomavailability"
 	"applicationDesignTest/internal/services"
 	"errors"
 	"net/http"
@@ -15,7 +15,7 @@ import (
 	"github.com/go-chi/httplog/v2"
 )
 
-func SetupMain(logger *httplog.Logger) *chi.Mux {
+func setupChi(logger *httplog.Logger) *chi.Mux {
 	r := chi.NewRouter()
 	if logger != nil {
 		r.Use(httplog.RequestLogger(logger))
@@ -24,21 +24,34 @@ func SetupMain(logger *httplog.Logger) *chi.Mux {
 	return r
 }
 
-func SetupOrders(r *chi.Mux) *chi.Mux {
-	repo := repositories.NewAvailabilityRepository()
+func setupMutex() *sync.Mutex {
 	var mutex sync.Mutex
-	uow := unitofwork.NewMutexUnitOfWork(&mutex)
-	bookingService := services.NewBookingService(*uow, repo)
+	return &mutex
+}
 
-	r.With(httphandlers.OrdersJsonDecoderMiddleware, httphandlers.OrdersValidationMiddleware).
-		Post("/orders", httphandlers.CreateOrderHandler(bookingService))
+func setupOrdersRoute(r *chi.Mux) *chi.Mux {
+	repo := roomavailability.NewAvailabilityRepository()
+
+	// NOTE:
+	// Alternative. Initialize and use PostgresUnitOfWork for the booking service.
+	mu := setupMutex()
+	uow := unitofwork.NewMutexUnitOfWork(mu)
+	bookingService := services.NewBookingService(uow, repo)
+
+	// NOTE:
+	// CreateOrderHandler is responsible for handling HTTP request.
+	// Setup for each request can be done via DI contrainers, middleware or another factory func.
+	// Specifically: setting up the new unit of work per request.
+
+	r.With(apihandlers.OrdersJsonDecoderMiddleware, apihandlers.OrdersValidationMiddleware).
+		Post("/orders", apihandlers.CreateOrderHandler(bookingService))
 	return r
 }
 
 func main() {
 	logger := logger.SetupLogger()
-	r := SetupMain(logger)
-	r = SetupOrders(r)
+	r := setupChi(logger)
+	r = setupOrdersRoute(r)
 
 	logger.Info("Server listening on localhost:8080")
 	err := http.ListenAndServe(":8080", r)
